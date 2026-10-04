@@ -491,6 +491,109 @@ def test_degenerate_cases_end_to_end():
             assert "†" not in line, line
 
 
+def test_rate_ci_shows_dash_when_denominator_is_zero():
+    nan = float("nan")
+
+    assert stats.rate_ci(0.0, nan, nan, 0) == "–"
+    assert stats.rate_ci(0.0, nan, nan, 0, method="not_computable") == "–"
+    assert stats.rate_ci(0.0, 0.0, 0.0, 0, method="wilson_cluster_fallback") == "–"
+    assert stats.rate_ci(0.5, 0.4, 0.6, 10) == "50.0 (40.0–60.0)"
+    assert stats.rate_ci(1.0, 0.887, 1.0, 30, method="wilson_cluster_fallback") == "100.0 (88.7–100.0)†"
+    assert stats.rate_ci(0.2, nan, nan, 5, method="not_computable") == "20.0 (산출 불가)"
+
+
+def write_source_only_results(root):
+    """source별로 공격만 / 정상만 / 둘 다 있는 평가 파일. torch 없이 만든 무작위 예측."""
+    rng = np.random.default_rng(11)
+
+    seeds = []
+
+    for i in range(90):
+        if i < 30:
+            label, source = 1, "src_attack_only"
+        elif i < 60:
+            label, source = 0, "src_benign_only"
+        else:
+            label, source = i % 2, "src_both"
+
+        seeds.append({"id": f"s_{i:03d}", "text": f"문장 {i}", "label": label, "source": source})
+
+    obf = []
+
+    for sd in seeds:
+        for j in range(3):
+            obf.append({
+                "id": f"{sd['id']}__v{j}", "text": f"{sd['text']} 변형{j}", "label": sd["label"], "source": sd["source"],
+                "seed_id": sd["id"], "technique": "yamin_swap", "intensity": 0.7, "changed": True, "n_changed": 1,
+            })
+
+    data = root / "data"
+    data.mkdir(parents=True)
+
+    write_jsonl(data / "test.jsonl", seeds)
+    write_jsonl(data / "obfuscated_test.jsonl", obf)
+
+    for training in TRAININGS:
+        for name, rows in (("clean", seeds), ("obfuscated", obf)):
+            df = pd.DataFrame(rows)
+            df["prediction"] = rng.integers(0, 2, size=len(df))
+            df["attack_score"] = df["prediction"].astype(float)
+
+            out = root / "results" / "step1" / "koelectra" / training / "eval" / name
+            out.mkdir(parents=True)
+
+            df.to_csv(out / "predictions.csv", index=False)
+
+    return data
+
+
+def test_markdown_shows_dash_for_zero_denominator_cells():
+    root = Path(tempfile.mkdtemp(prefix="step1_stats_dash_"))
+    atexit.register(shutil.rmtree, root, ignore_errors=True)
+
+    data = write_source_only_results(root)
+    out_dir = root / "stats"
+
+    proc = subprocess.run(
+        [
+            sys.executable, str(REPO / "scripts" / "step1_stats.py"),
+            "--results-root", str(root / "results" / "step1"),
+            "--clean-input", str(data / "test.jsonl"),
+            "--obfuscated-input", str(data / "obfuscated_test.jsonl"),
+            "--models", "koelectra",
+            "--n-boot", "200",
+            "--output-dir", str(out_dir),
+        ],
+        capture_output=True, text=True, cwd=str(REPO),
+    )
+
+    assert proc.returncode == 0, proc.stderr + proc.stdout
+
+    src = pd.read_csv(out_dir / "source_metrics.csv")
+
+    assert (src.loc[src["source"] == "src_attack_only", "n_benign"] == 0).all()
+    assert (src.loc[src["source"] == "src_benign_only", "n_attack"] == 0).all()
+
+    md = (out_dir / "step1_stats_tables.md").read_text(encoding="utf-8")
+
+    assert "0.0 (–)" not in md and "0.0 (산출 불가)" not in md
+
+    def cells(prefix):
+        line = next(l for l in md.splitlines() if l.startswith(prefix))
+
+        return [c.strip() for c in line.strip().strip("|").split("|")]
+
+    # | Model | Training | Eval | source | n(attack) | Recall | n(benign) | FPR |
+    for kind in ("clean", "obfuscated"):
+        a = cells(f"| KoELECTRA | Original | {kind} | src_attack_only |")
+        b = cells(f"| KoELECTRA | Original | {kind} | src_benign_only |")
+        c = cells(f"| KoELECTRA | Original | {kind} | src_both |")
+
+        assert a[6] == "0" and a[7] == "–" and a[5] != "–"
+        assert b[4] == "0" and b[5] == "–" and b[7] != "–"
+        assert c[5] != "–" and c[7] != "–"
+
+
 def test_technique_group_assignment():
     pairs = stats.parse_train_techniques("yamin_swap:0.7,symbol_insert:0.3")
 

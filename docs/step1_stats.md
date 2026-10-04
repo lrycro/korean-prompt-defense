@@ -46,6 +46,7 @@ python scripts/step1_stats.py \
 - 부트스트랩: 반복 2000, 시드 고정, 백분위 구간. 같은 원문의 변형은 독립이 아니므로 `seed_id`를 재표본 단위로 한다.
 - 성공이 0건 또는 전체: 구간 폭이 0이 되므로 `seed_id` 수를 n으로 한 Wilson을 쓴다. `ci_method = wilson_cluster_fallback`, 표에는 †.
 - 재표본 결과가 모두 같음(F1, Precision, 차이): 구간을 만들지 않는다. `ci_method = not_computable`, 표에는 `산출 불가`.
+- 해당 label 행이 없는 칸(분모 0)은 표에 `–`로 표시한다. csv의 값은 `evaluate.py`와 같이 0.0이다.
 - 참고용 Wilson 구간은 `*_wilson_lo/hi` 열에 남긴다. 표에는 기본 구간만 표시한다.
 
 ## 분해

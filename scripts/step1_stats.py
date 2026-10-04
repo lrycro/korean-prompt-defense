@@ -1219,6 +1219,14 @@ def with_ci(value, lo, hi, signed=False, method=None):
     return text
 
 
+def rate_ci(value, lo, hi, n, method=None):
+    """비율 표시. 분모(n)가 0이면 값이 정의되지 않으므로 '–'."""
+    if n == 0:
+        return "–"
+
+    return with_ci(value, lo, hi, method=method)
+
+
 def md_table(headers, rows):
     lines = [
         "| " + " | ".join(headers) + " |",
@@ -1265,8 +1273,8 @@ def write_markdown(path, cond_df, delta_df, retain_df, group_df, source_df, beni
                     model,
                     training,
                     int(r["n"]),
-                    with_ci(r["recall"], r["recall_ci_lo"], r["recall_ci_hi"], method=r["recall_ci_method"]),
-                    with_ci(r["fpr"], r["fpr_ci_lo"], r["fpr_ci_hi"], method=r["fpr_ci_method"]),
+                    rate_ci(r["recall"], r["recall_ci_lo"], r["recall_ci_hi"], r["n_attack"], method=r["recall_ci_method"]),
+                    rate_ci(r["fpr"], r["fpr_ci_lo"], r["fpr_ci_hi"], r["n_benign"], method=r["fpr_ci_method"]),
                     with_ci(r["f1"], r["f1_boot_lo"], r["f1_boot_hi"], method=r["f1_ci_method"]),
                     with_ci(r["precision"], r["precision_boot_lo"], r["precision_boot_hi"], method=r["precision_ci_method"]),
                 ])
@@ -1334,9 +1342,9 @@ def write_markdown(path, cond_df, delta_df, retain_df, group_df, source_df, beni
                 training,
                 r["group"],
                 int(r["n_attack"]),
-                with_ci(r["recall"], r["recall_ci_lo"], r["recall_ci_hi"], method=r["recall_ci_method"]),
+                rate_ci(r["recall"], r["recall_ci_lo"], r["recall_ci_hi"], r["n_attack"], method=r["recall_ci_method"]),
                 int(r["n_benign"]),
-                with_ci(r["fpr"], r["fpr_ci_lo"], r["fpr_ci_hi"], method=r["fpr_ci_method"]),
+                rate_ci(r["fpr"], r["fpr_ci_lo"], r["fpr_ci_hi"], r["n_benign"], method=r["fpr_ci_method"]),
             ])
 
         trained = ", ".join(f"{n}:{i}" for n, i in train_pairs)
@@ -1360,9 +1368,9 @@ def write_markdown(path, cond_df, delta_df, retain_df, group_df, source_df, beni
                 r["eval_name"],
                 r["source"],
                 int(r["n_attack"]),
-                with_ci(r["recall"], r["recall_ci_lo"], r["recall_ci_hi"], method=r["recall_ci_method"]),
+                rate_ci(r["recall"], r["recall_ci_lo"], r["recall_ci_hi"], r["n_attack"], method=r["recall_ci_method"]),
                 int(r["n_benign"]),
-                with_ci(r["fpr"], r["fpr_ci_lo"], r["fpr_ci_hi"], method=r["fpr_ci_method"]),
+                rate_ci(r["fpr"], r["fpr_ci_lo"], r["fpr_ci_hi"], r["n_benign"], method=r["fpr_ci_method"]),
             ])
 
         parts.append("### source별 Recall / FPR")
@@ -1382,10 +1390,10 @@ def write_markdown(path, cond_df, delta_df, retain_df, group_df, source_df, beni
                 model,
                 training,
                 int(r["clean_n_benign"]),
-                with_ci(r["clean_fpr"], r["clean_fpr_ci_lo"], r["clean_fpr_ci_hi"]),
+                rate_ci(r["clean_fpr"], r["clean_fpr_ci_lo"], r["clean_fpr_ci_hi"], r["clean_n_benign"]),
                 int(r["n_benign_changed"]),
                 int(r["false_positives"]),
-                with_ci(r["fpr"], r["fpr_ci_lo"], r["fpr_ci_hi"], method=r["ci_method"]),
+                rate_ci(r["fpr"], r["fpr_ci_lo"], r["fpr_ci_hi"], r["n_benign_changed"], method=r["ci_method"]),
             ])
 
         parts.append("### 정상 문장의 난독화 오탐률 (label 0 & changed=true)")
